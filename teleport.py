@@ -17,7 +17,7 @@ TransferEvent = RegisterAction("transfer", "from", "to", "amount")
 ApprovalEvent = RegisterAction("approval", "owner", "spender", "amount")
 
 ctx = GetContext()
-ctx2={"biddingAmount":0}
+ctx2={}
 NAME = 'MyToken'
 SYMBOL = 'MYT'
 DECIMALS = 8
@@ -103,8 +103,31 @@ def Main(operation, args):
         biddingAmount=args[2]
         deliveryTime=args[3]
         return acceptBidding(txHash, bidder_account, biddingAmount, deliveryTime)
+    if operation=='deleteOrder':
+        if len(args)!=2:
+            return False
+        txHash=args[0]
+        order_account=args[1]
+        return deleteOrder(txHash, order_account)
+    if operation=='deleteMyBid':
+        if len(args)!=2:
+            return False
+        bidder_account=args[0]
+        txHash=args[1]
+        return deleteMyBid(bidder_account,txHash)
+    if operation=='modifyOrder':
+        if len(args)!=7:
+            return False
+        txHash=args[0]
+        order_account=args[1]
+        biddingTime=args[2]
+        radius=args[3]
+        weight=args[4]
+        pickupLocation=args[5]
+        destination=args[6]
+        return modifyOrder(txHash, order_account, biddingTime, radius, weight, pickupLocation, destination)
     return False
-
+    
 
 def init():
     """
@@ -304,15 +327,7 @@ https://github.com/ONT-Avocados/python-template/blob/master/libs/SafeCheck.py
 """
 
 
-def Require(condition):
-    """
-	If condition is not satisfied, return false
-	:param condition: required condition
-	:return: True or false
-	"""
-    if not condition:
-        Revert()
-    return True
+
 
 def VaasAssert(expr):
     if not expr:
@@ -325,33 +340,32 @@ def concatkey(str1,str2):
     return concat(concat(str1, '_'), str2)
         
 def registeringOrder(order_account, biddingTime, radius, weight, pickupLocation, destination):
-    if CheckWitness(order_account)==False:
-        return False
+    RequireIsAddress(order_account)
+    RequireWitness(order_account)
         
-    else:
-        orderTime=GetTime()
-        ctx1={}
-        txHash = GetTransactionHash(GetScriptContainer())
-        #entry=GetEntryScriptHash()
-        #calling=GetCallingScriptHash()
-        #exect=GetExecutingScriptHash()
-        ctx1["biddingTime"]=biddingTime
-        ctx1["radius"]=radius
-        ctx1["weight"]=weight
-        ctx1["pickupLocation"]=pickupLocation
-        ctx1["destination"]=destination
-        ctx1["orderTime"]=orderTime
-        ctx1["txHash"]=txHash
+    orderTime=GetTime()
+    ctx3={}
+    txHash = GetTransactionHash(GetScriptContainer())
+    #entry=GetEntryScriptHash()
+    #calling=GetCallingScriptHash()
+    #exect=GetExecutingScriptHash()
+    ctx3["biddingTime"]=biddingTime
+    ctx3["radius"]=radius
+    ctx3["weight"]=weight
+    ctx3["pickupLocation"]=pickupLocation
+    ctx3["destination"]=destination
+    ctx3["orderTime"]=orderTime
+    ctx3["txHash"]=txHash
+    ctx3["order_account"]=order_account
+    Log('registered')
+    #Log(txHash)
+    Put(ctx, txHash, Serialize(ctx3))
         
-        Notify('registered')
-        Notify(txHash)
-        Put(ctx, txHash, Serialize(ctx1))
-        
-        #Notify(entry)
-        #Notify(calling)
-        #Notify(exect)
-        #Notify(orderTime)
-        return True
+    #Notify(entry)
+    #Notify(calling)
+    #Notify(exect)
+    #Notify(orderTime)
+    return True
 def ds(dic):
     ss=Deserialize(Get(ctx, dic))
     Put(ctx, "dict", Serialize(ss))
@@ -362,8 +376,8 @@ def ds(dic):
 
 
 def acceptBidding(txHash, bidder_account, biddingAmount, deliveryTime):
-    if CheckWitness(bidder_account)==False:
-        return False
+    RequireIsAddress(bidder_account)
+    RequireWitness(bidder_account)
     if GetEntryScriptHash()==GetCallingScriptHash():
         ctx3=ds(txHash)
         Notify(ctx3["txHash"])
@@ -372,20 +386,78 @@ def acceptBidding(txHash, bidder_account, biddingAmount, deliveryTime):
             timeDiff=GetTime()-orderTime
             biddingTime=ctx3["biddingTime"]
             if timeDiff<biddingTime:
-                if ctx2["biddingAmount"]<=0 or ctx2["biddingAmount"]>biddingAmount:
-                    ctx2["bidder_account"]= bidder_account
-                    ctx2["biddingAmount"]= biddingAmount
-                    ctx2["deliveryTime"]= deliveryTime
-                    #Notify(ctx1)
-                    ctx3["bidder_account"]=ctx2["bidder_account"]
-                    ctx3["biddingAmount"]=ctx2["biddingAmount"]
-                    ctx3["deliveryTime"]=ctx2["deliveryTime"]
-                    Put(ctx, txHash, Serialize(ctx3))
-                    return True
+                ctx2['biddingAmount']=biddingAmount
+                ctx2['deliveryTime']=deliveryTime
+                ctx2['bidder_account']=bidder_account
+                ctx3[bidder_account]=ctx2
+                Put(ctx, txHash, Serialize(ctx3))
                 return True
                 
-            return True
-        Put(ctx, txHash, Serialize(ctx3))
+            
+        
         #AZ5JJ5RdVopJZ2JL9Qyemkn4sErSyXvUmo
-        return False            
-    return True
+                    
+    
+def deleteOrder(txHash,order_account):
+    RequireIsAddress(order_account)
+    RequireWitness(order_account)
+    if GetEntryScriptHash()==GetCallingScriptHash():
+        ctx3=ds(txHash)
+        if order_account==ctx3["order_account"]:
+            Delete(ctx,txHash)
+            return True
+        else:
+            Log("I'm afraid! This is not your order!")
+            return False
+    else:
+        Log("Get Lost!")
+        return False
+def deleteMyBid(bidder_account,txHash):
+    RequireIsAddress(bidder_account)
+    RequireWitness(bidder_account)
+    if GetEntryScriptHash()==GetCallingScriptHash():
+        ctx3=ds(txHash)
+        #ctx2=ctx3[bidder_account]
+        #Notify(ctx2)
+        if bidder_account==ctx3[bidder_account]['bidder_account']:
+            ctx3[bidder_account]=None
+            Put(ctx,txHash,Serialize(ctx3))
+            return True
+        else:
+            Log("I'm afraid! This is not your bid!")
+            return False
+    else:
+        Log("Get Lost!")
+        return False
+def modifyOrder(txHash, order_account, biddingTime, radius, weight, pickupLocation, destination):
+    RequireIsAddress(order_account)
+    RequireWitness(order_account)
+    if GetEntryScriptHash()==GetCallingScriptHash():
+        ctx3=ds(txHash)
+        if order_account==ctx3["order_account"]:
+            ctx3["biddingTime"]=biddingTime
+            ctx3["radius"]=radius
+            ctx3["weight"]=weight
+            ctx3["pickupLocation"]=pickupLocation
+            ctx3["destination"]=destination
+            ctx3["txHash"]=txHash
+            Put(ctx, txHash, Serialize(ctx3))
+            Log('modified')
+            return True
+        else:
+            Log("I'm afraid! This is not your order!")
+            return False
+    else:
+        Log("Get Lost!")
+        return False
+    #require 
+    
+def RequireIsAddress(address):
+    Require(len(address) == 20, 'Address has invalid length')
+def RequireWitness(address):
+    Require(CheckWitness(address), 'Address is not witness')
+def Require(expr, message='There was an error'):
+    if not expr:
+        Log(message)
+        raise Exception(message)
+
